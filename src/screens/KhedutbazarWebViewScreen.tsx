@@ -30,6 +30,7 @@ const AUTH_TOKEN_KEY = 'authToken';
 
 const INJECTED_JAVASCRIPT = `
   (function() {
+    document.body.classList.add('ios-app');
     document.addEventListener('click', function(e) {
       var target = e.target;
       while (target && target.tagName !== 'A') {
@@ -340,6 +341,7 @@ function KhedutbazarWebViewScreen(): React.JSX.Element {
           source={{ uri: currentUrl }}
           style={styles.webView}
           originWhitelist={['https://*', 'http://*']}
+          applicationNameForUserAgent="KhedutbazarApp/1.0"
           onShouldStartLoadWithRequest={handleShouldStartLoadWithRequest}
           injectedJavaScript={INJECTED_JAVASCRIPT}
           onMessage={handleWebViewMessage}
