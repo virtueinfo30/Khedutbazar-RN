@@ -58,9 +58,36 @@ Each workflow requires two inputs when triggered:
 
 ---
 
-## 3. Version Management & Mapping
+## 3. Version Management & Developer Guide (Approach 1)
 
-Version numbers are centrally controlled by CI/CD and injected cleanly into platform build systems:
+### 📌 How Developers Determine Next Build Numbers
+When any developer triggers a new build in GitHub Actions, they must follow this standard approach:
+
+#### 🍏 For iOS Builds (TestFlight)
+1. Open **[App Store Connect ➔ Apps ➔ Khedutbazar ➔ TestFlight](https://appstoreconnect.apple.com/apps/6771325067/testflight/ios)**.
+2. Look at the top-most build in the list (e.g. `Version 1.0.1 (5)`).
+3. **Set `version_code` to: `Latest Build Number + 1`** (e.g. if highest is `5`, use `6`).
+4. **Set `version_name`**:
+   - Keep as `1.0.1` if it is bug fixes / patch changes.
+   - Increment to `1.0.2` or `1.1.0` if this is a new sprint or feature release.
+
+#### 🤖 For Android Builds (Firebase App Distribution)
+1. Open **[Firebase Console ➔ Khedutbazar ➔ App Distribution](https://console.firebase.google.com/)**.
+2. Look at the highest released build number under the target environment (Development or Production).
+3. **Set `version_code` to: `Latest Build Number + 1`** (e.g. if highest is `5`, use `6`).
+4. **Set `version_name`**: Match the planned semantic version (e.g. `1.0.1`).
+
+### 📊 Quick Cheatsheet for Team Members:
+
+| Current Live / TestFlight | Nature of Changes | Next `version_name` | Next `version_code` |
+| :--- | :--- | :--- | :--- |
+| `1.0.1 (5)` | Bug fixes / minor UI tweaks | `1.0.1` | **`6`** |
+| `1.0.1 (5)` | New features / sprint release | `1.0.2` (or `1.1.0`) | **`6`** |
+| `1.0.1 (6)` | Further QA fixes | `1.0.1` (or `1.0.2`) | **`7`** |
+
+> ⚠️ **Strict Rule**: `version_code` must strictly increase with each build (`6`, `7`, `8`...). TestFlight and Play Store reject any build with a repeated or lower build number.
+
+### Version Mapping in Codebase:
 
 | CI/CD Input | Android Mapping | iOS Mapping |
 | :--- | :--- | :--- |

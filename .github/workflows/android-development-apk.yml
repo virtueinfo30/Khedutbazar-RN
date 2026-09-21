@@ -4,14 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       version_name:
-        description: "App Version Name (e.g. 1.0.0)"
+        description: "App Version Name (versionName, e.g. 1.0.1)"
         required: true
-        default: "1.0"
+        default: "1.0.1"
         type: string
       version_code:
-        description: "Build / Version Code (e.g. 5)"
+        description: "Build / Version Code (versionCode - Check Firebase App Distribution for latest + 1, e.g. 6)"
         required: true
-        default: "5"
+        default: "6"
         type: string
 
 permissions:
