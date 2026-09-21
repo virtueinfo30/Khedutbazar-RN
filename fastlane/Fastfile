@@ -235,19 +235,19 @@ end
 
 # Root aliases so `fastlane android_development_apk` or `fastlane android development_apk` both work
 lane :android_development_apk do |options|
-  Fastlane::FastFile.new.runner.execute("development_apk", :android, options)
+  runner.execute("development_apk", :android, options)
 end
 
 lane :android_development_aab do |options|
-  Fastlane::FastFile.new.runner.execute("development_aab", :android, options)
+  runner.execute("development_aab", :android, options)
 end
 
 lane :android_production_apk do |options|
-  Fastlane::FastFile.new.runner.execute("production_apk", :android, options)
+  runner.execute("production_apk", :android, options)
 end
 
 lane :android_production_aab do |options|
-  Fastlane::FastFile.new.runner.execute("production_aab", :android, options)
+  runner.execute("production_aab", :android, options)
 end
 
 # ==============================================================================
@@ -373,14 +373,14 @@ platform :ios do
 end
 
 lane :ios_development_testflight do |options|
-  Fastlane::FastFile.new.runner.execute("development_testflight", :ios, options)
+  runner.execute("development_testflight", :ios, options)
 end
 
 lane :ios_production_testflight do |options|
-  Fastlane::FastFile.new.runner.execute("production_testflight", :ios, options)
+  runner.execute("production_testflight", :ios, options)
 end
 
 # Alias for backward compatibility
 lane :ios_testflight do |options|
-  Fastlane::FastFile.new.runner.execute("production_testflight", :ios, options)
+  runner.execute("production_testflight", :ios, options)
 end
