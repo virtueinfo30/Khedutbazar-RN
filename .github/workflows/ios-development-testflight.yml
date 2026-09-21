@@ -24,12 +24,22 @@ concurrency:
 jobs:
   build-and-upload-testflight:
     name: Build iOS Dev Archive & Upload to TestFlight (Internal Only)
-    runs-on: macos-14
+    runs-on: macos-15
     environment: development
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Select Xcode 16.2+
+        run: |
+          if [ -d "/Applications/Xcode_16.2.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_16.2.app
+          elif [ -d "/Applications/Xcode_16.1.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_16.1.app
+          fi
+          echo "Active Xcode version:"
+          xcodebuild -version
 
       - name: Validate version inputs
         run: |
