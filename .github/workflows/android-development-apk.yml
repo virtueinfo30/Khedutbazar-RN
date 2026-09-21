@@ -13,6 +13,11 @@ on:
         required: true
         default: "6"
         type: string
+      release_notes:
+        description: "Release Notes / Changelog for Testers (Optional - leave empty to auto-use latest git commit)"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -109,10 +114,12 @@ jobs:
           ANDROID_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
           ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS || 'khedutbazar' }}
           ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+          RELEASE_NOTES: ${{ inputs.release_notes }}
         run: |
           bundle exec fastlane android_development_apk \
             version_name:"${{ inputs.version_name }}" \
-            version_code:"${{ inputs.version_code }}"
+            version_code:"${{ inputs.version_code }}" \
+            release_notes:"${{ inputs.release_notes }}"
 
       - name: Clean sensitive signing files
         if: always()

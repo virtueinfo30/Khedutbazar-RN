@@ -52,9 +52,10 @@ All release workflows are triggered manually via **GitHub Actions (`workflow_dis
 | `.github/workflows/ios-production-testflight.yml` | iOS Production IPA | **Apple TestFlight** (Prod Scheme / Internal) + GitHub Artifact |
 
 ### Workflow Trigger Inputs
-Each workflow requires two inputs when triggered:
+Each workflow requires inputs when triggered:
 1. `version_name`: Semantic/marketing app version string (e.g. `1.0.1`).
 2. `version_code`: Positive integer build number (e.g. `6`).
+3. `release_notes` (Android APK workflows only): Optional custom release notes/changelog for testers. If left blank, Fastlane automatically uses the latest git commit message and attaches environment, version, git commit hash, and build timestamp metadata.
 
 ---
 
