@@ -24,25 +24,25 @@ concurrency:
 jobs:
   build-and-upload-testflight:
     name: Build iOS Prod Archive & Upload to TestFlight (Internal Only)
-    runs-on: macos-14
+    runs-on: macos-latest
     environment: production
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Select Xcode
+      - name: Select Latest Xcode and initialize
         run: |
-          if [ -d "/Applications/Xcode_16.1.app" ]; then
-            sudo xcode-select -s /Applications/Xcode_16.1.app
-          elif [ -d "/Applications/Xcode_16.0.app" ]; then
-            sudo xcode-select -s /Applications/Xcode_16.0.app
-          elif [ -d "/Applications/Xcode_15.4.app" ]; then
-            sudo xcode-select -s /Applications/Xcode_15.4.app
+          LATEST_XCODE=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1)
+          if [ -n "$LATEST_XCODE" ] && [ -d "$LATEST_XCODE" ]; then
+            echo "Selecting latest Xcode at: $LATEST_XCODE"
+            sudo xcode-select -s "$LATEST_XCODE"
           fi
           sudo xcodebuild -runFirstLaunch || true
           echo "Active Xcode version:"
           xcodebuild -version
+          echo "Active iOS SDK version:"
+          xcrun --sdk iphoneos --show-sdk-version
 
       - name: Validate version inputs
         run: |
