@@ -16,6 +16,12 @@ if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
 }
 
+def releaseStoreFile = keystoreProperties['RELEASE_STORE_FILE'] ?: System.getenv("ANDROID_RELEASE_STORE_FILE")
+def releaseStorePassword = keystoreProperties['RELEASE_STORE_PASSWORD'] ?: System.getenv("ANDROID_RELEASE_STORE_PASSWORD")
+def releaseKeyAlias = keystoreProperties['RELEASE_KEY_ALIAS'] ?: System.getenv("ANDROID_RELEASE_KEY_ALIAS")
+def releaseKeyPassword = keystoreProperties['RELEASE_KEY_PASSWORD'] ?: System.getenv("ANDROID_RELEASE_KEY_PASSWORD")
+def hasReleaseSigning = releaseStoreFile && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
+
 
 
 /**
@@ -98,8 +104,12 @@ android {
         applicationId "com.vi.khedutbazar"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 5
-        versionName "1.0"
+        versionCode project.hasProperty("VERSION_CODE")
+            ? project.property("VERSION_CODE").toInteger()
+            : (System.getenv("VERSION_CODE") ? System.getenv("VERSION_CODE").toInteger() : 5)
+        versionName project.hasProperty("VERSION_NAME")
+            ? project.property("VERSION_NAME").toString()
+            : (System.getenv("VERSION_NAME") ?: "1.0")
         resValue "string", "build_config_package", "com.vi.khedutbazar"
     }
     signingConfigs {
@@ -110,11 +120,11 @@ android {
             keyPassword 'android'
         }
         release {
-            if (keystorePropertiesFile.exists()) {
-                storeFile rootProject.file(keystoreProperties['RELEASE_STORE_FILE'])
-                storePassword keystoreProperties['RELEASE_STORE_PASSWORD']
-                keyAlias keystoreProperties['RELEASE_KEY_ALIAS']
-                keyPassword keystoreProperties['RELEASE_KEY_PASSWORD']
+            if (hasReleaseSigning) {
+                storeFile rootProject.file(releaseStoreFile)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
             }
         }
     }
@@ -124,12 +134,12 @@ android {
         }
         release {
             def isReleaseTask = gradle.startParameter.taskNames.any { it.toLowerCase().contains("release") }
-            if (isReleaseTask && !keystorePropertiesFile.exists()) {
+            if (isReleaseTask && !hasReleaseSigning) {
                 throw new GradleException(
-                    "Missing android/keystore.properties. Copy android/keystore.properties.example and provide release signing credentials."
+                    "Missing release signing credentials. Provide android/keystore.properties or set ANDROID_RELEASE_STORE_FILE, ANDROID_RELEASE_STORE_PASSWORD, ANDROID_RELEASE_KEY_ALIAS, ANDROID_RELEASE_KEY_PASSWORD."
                 )
             }
-            if (keystorePropertiesFile.exists()) {
+            if (hasReleaseSigning) {
                 signingConfig signingConfigs.release
             }
             minifyEnabled enableProguardInReleaseBuilds

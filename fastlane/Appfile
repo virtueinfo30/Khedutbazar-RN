@@ -1,0 +1,9 @@
+# fastlane/Appfile
+# Defines configuration information for Fastlane tools
+
+# iOS Configuration
+app_identifier("com.vi.khedutbazar")
+team_id("5DSXYK6JTQ")
+
+# Android Configuration
+package_name("com.vi.khedutbazar")

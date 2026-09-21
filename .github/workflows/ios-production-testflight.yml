@@ -1,0 +1,142 @@
+name: iOS Production TestFlight Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: "App Version Name (MARKETING_VERSION, e.g. 1.0.0)"
+        required: true
+        default: "1.0"
+        type: string
+      version_code:
+        description: "Build / Version Code (CURRENT_PROJECT_VERSION, e.g. 5)"
+        required: true
+        default: "5"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-prod-testflight
+  cancel-in-progress: false
+
+jobs:
+  build-and-upload-testflight:
+    name: Build iOS Prod Archive & Upload to TestFlight (Internal Only)
+    runs-on: macos-14
+    environment: production
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate version inputs
+        run: |
+          VERSION_NAME="${{ inputs.version_name }}"
+          VERSION_CODE="${{ inputs.version_code }}"
+          echo "Validating Version Name: $VERSION_NAME"
+          echo "Validating Version Code: $VERSION_CODE"
+
+          if [ -z "$VERSION_NAME" ]; then
+            echo "::error::version_name cannot be empty"
+            exit 1
+          fi
+
+          if ! [[ "$VERSION_CODE" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::version_code must be a positive integer > 0 (received: $VERSION_CODE)"
+            exit 1
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+          cache: "yarn"
+
+      - name: Setup Ruby and Bundler
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3.0"
+          bundler-cache: true
+
+      - name: Install JavaScript dependencies
+        run: yarn install
+
+      - name: Configure environment file
+        run: |
+          if [ -n "${{ secrets.ENV_PRODUCTION }}" ]; then
+            echo "${{ secrets.ENV_PRODUCTION }}" > .env.production
+            echo "Wrote .env.production from ENV_PRODUCTION secret."
+          elif [ -f ".env.production.example" ]; then
+            cp .env.production.example .env.production
+            echo "Created .env.production from example template."
+          fi
+          # Ensure active .env is set to production
+          cp .env.production .env
+
+      - name: Cache CocoaPods Pods
+        uses: actions/cache@v4
+        with:
+          path: ios/Pods
+          key: ${{ runner.os }}-pods-${{ hashFiles('ios/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
+
+      - name: Install CocoaPods
+        run: |
+          bundle exec pod install --project-directory=ios
+
+      - name: Setup Apple code signing certificate & profile
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 12)
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          if [ -n "${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}" ]; then
+            CERT_PATH=$RUNNER_TEMP/dist.p12
+            echo "${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}" | base64 --decode > "$CERT_PATH"
+            security import "$CERT_PATH" -P "${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+            security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+            rm -f "$CERT_PATH"
+            echo "Successfully imported iOS distribution certificate into temporary keychain."
+          fi
+
+          if [ -n "${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}" ]; then
+            PROFILE_DIR=~/Library/MobileDevice/Provisioning\ Profiles
+            mkdir -p "$PROFILE_DIR"
+            PROFILE_UUID=$(uuidgen)
+            echo "${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}" | base64 --decode > "$PROFILE_DIR/${PROFILE_UUID}.mobileprovision"
+            echo "Successfully installed provisioning profile: ${PROFILE_UUID}.mobileprovision"
+          fi
+
+          security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+
+      - name: Build and upload to TestFlight
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+        run: |
+          bundle exec fastlane ios_production_testflight \
+            version_name:"${{ inputs.version_name }}" \
+            version_code:"${{ inputs.version_code }}"
+
+      - name: Clean temporary keychain
+        if: always()
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          if [ -f "$KEYCHAIN_PATH" ]; then
+            security delete-keychain "$KEYCHAIN_PATH" || true
+          fi
+
+      - name: Upload Production IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Khedutbazar-Production-${{ inputs.version_name }}-${{ inputs.version_code }}.ipa
+          path: ios/build/Khedutbazar-Production-${{ inputs.version_name }}-${{ inputs.version_code }}.ipa
+          if-no-files-found: error
+          retention-days: 30
