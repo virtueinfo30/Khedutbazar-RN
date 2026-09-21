@@ -263,6 +263,28 @@ platform :ios do
     ipa_dir = File.expand_path("../ios/build", __dir__)
     ipa_name = "Khedutbazar-Development-#{version_name}-#{version_code}.ipa"
 
+    profile_specifier = ENV["PROVISIONING_PROFILE_SPECIFIER"] || ENV["PROVISIONING_PROFILE_NAME"] || ENV["PROVISIONING_PROFILE_UUID"]
+
+    xcargs_items = [
+      "MARKETING_VERSION=#{version_name}",
+      "CURRENT_PROJECT_VERSION=#{version_code}"
+    ]
+
+    export_opts = {
+      method: "app-store"
+    }
+
+    if profile_specifier && !profile_specifier.to_s.strip.empty?
+      UI.message("Applying manual signing settings with profile: #{profile_specifier}")
+      xcargs_items << "CODE_SIGN_STYLE=Manual"
+      xcargs_items << "CODE_SIGN_IDENTITY=\"Apple Distribution\""
+      xcargs_items << "PROVISIONING_PROFILE_SPECIFIER=\"#{profile_specifier}\""
+      export_opts[:signingStyle] = "manual"
+      export_opts[:provisioningProfiles] = {
+        "com.vi.khedutbazar" => profile_specifier
+      }
+    end
+
     # Build and archive using the Development scheme
     build_app(
       workspace: "ios/Khedutbazar.xcworkspace",
@@ -272,7 +294,8 @@ platform :ios do
       export_method: "app-store",
       output_directory: ipa_dir,
       output_name: ipa_name,
-      xcargs: "MARKETING_VERSION=#{version_name} CURRENT_PROJECT_VERSION=#{version_code}"
+      export_options: export_opts,
+      xcargs: xcargs_items.join(" ")
     )
 
     generated_ipa = File.join(ipa_dir, ipa_name)
@@ -321,6 +344,28 @@ platform :ios do
     ipa_dir = File.expand_path("../ios/build", __dir__)
     ipa_name = "Khedutbazar-Production-#{version_name}-#{version_code}.ipa"
 
+    profile_specifier = ENV["PROVISIONING_PROFILE_SPECIFIER"] || ENV["PROVISIONING_PROFILE_NAME"] || ENV["PROVISIONING_PROFILE_UUID"]
+
+    xcargs_items = [
+      "MARKETING_VERSION=#{version_name}",
+      "CURRENT_PROJECT_VERSION=#{version_code}"
+    ]
+
+    export_opts = {
+      method: "app-store"
+    }
+
+    if profile_specifier && !profile_specifier.to_s.strip.empty?
+      UI.message("Applying manual signing settings with profile: #{profile_specifier}")
+      xcargs_items << "CODE_SIGN_STYLE=Manual"
+      xcargs_items << "CODE_SIGN_IDENTITY=\"Apple Distribution\""
+      xcargs_items << "PROVISIONING_PROFILE_SPECIFIER=\"#{profile_specifier}\""
+      export_opts[:signingStyle] = "manual"
+      export_opts[:provisioningProfiles] = {
+        "com.vi.khedutbazar" => profile_specifier
+      }
+    end
+
     # Build and archive using the Production scheme
     build_app(
       workspace: "ios/Khedutbazar.xcworkspace",
@@ -330,7 +375,8 @@ platform :ios do
       export_method: "app-store",
       output_directory: ipa_dir,
       output_name: ipa_name,
-      xcargs: "MARKETING_VERSION=#{version_name} CURRENT_PROJECT_VERSION=#{version_code}"
+      export_options: export_opts,
+      xcargs: xcargs_items.join(" ")
     )
 
     generated_ipa = File.join(ipa_dir, ipa_name)

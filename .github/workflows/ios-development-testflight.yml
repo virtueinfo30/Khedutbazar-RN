@@ -122,12 +122,35 @@ jobs:
           if [ -n "${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}" ]; then
             PROFILE_DIR=~/Library/MobileDevice/Provisioning\ Profiles
             mkdir -p "$PROFILE_DIR"
-            PROFILE_UUID=$(uuidgen)
-            echo "${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}" | base64 --decode > "$PROFILE_DIR/${PROFILE_UUID}.mobileprovision"
-            echo "Successfully installed provisioning profile: ${PROFILE_UUID}.mobileprovision"
+            TEMP_PROFILE=$RUNNER_TEMP/profile.mobileprovision
+            echo "${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}" | base64 --decode > "$TEMP_PROFILE"
+
+            PROFILE_UUID=$(security cms -D -i "$TEMP_PROFILE" 2>/dev/null | plutil -extract UUID raw - 2>/dev/null || true)
+            PROFILE_NAME=$(security cms -D -i "$TEMP_PROFILE" 2>/dev/null | plutil -extract Name raw - 2>/dev/null || true)
+
+            if [ -n "$PROFILE_UUID" ]; then
+              cp "$TEMP_PROFILE" "$PROFILE_DIR/${PROFILE_UUID}.mobileprovision"
+              echo "PROVISIONING_PROFILE_UUID=$PROFILE_UUID" >> $GITHUB_ENV
+              echo "Successfully installed provisioning profile: ${PROFILE_UUID}.mobileprovision"
+            else
+              FALLBACK_UUID=$(uuidgen)
+              cp "$TEMP_PROFILE" "$PROFILE_DIR/${FALLBACK_UUID}.mobileprovision"
+              echo "PROVISIONING_PROFILE_UUID=$FALLBACK_UUID" >> $GITHUB_ENV
+              echo "Successfully installed provisioning profile: ${FALLBACK_UUID}.mobileprovision"
+            fi
+
+            if [ -n "$PROFILE_NAME" ]; then
+              echo "PROVISIONING_PROFILE_SPECIFIER=$PROFILE_NAME" >> $GITHUB_ENV
+              echo "PROVISIONING_PROFILE_NAME=$PROFILE_NAME" >> $GITHUB_ENV
+              echo "Detected Provisioning Profile Name: $PROFILE_NAME"
+            elif [ -n "$PROFILE_UUID" ]; then
+              echo "PROVISIONING_PROFILE_SPECIFIER=$PROFILE_UUID" >> $GITHUB_ENV
+            fi
+            rm -f "$TEMP_PROFILE"
           fi
 
-          security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+          security default-keychain -s "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
 
       - name: Build and upload to TestFlight
         env:
