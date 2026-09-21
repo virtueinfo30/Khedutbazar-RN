@@ -1,4 +1,6 @@
-export const KHEDUTBAZAR_URL = 'https://khedutbazar.in/';
-// export const KHEDUTBAZAR_URL =
-//   'https://arbitrative-synostotical-jaunita.ngrok-free.dev/';
+import { ENV } from '../config/env';
+
+export const KHEDUTBAZAR_URL = ENV.KHEDUTBAZAR_URL;
 export const BRAND_COLOR = '#10B981';
+export { ENV };
+

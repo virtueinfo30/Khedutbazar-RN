@@ -33,7 +33,10 @@ local.properties
 .cxx/
 *.keystore
 !debug.keystore
+android/keystore.properties
+!android/keystore.properties.example
 .kotlin/
+
 
 # node.js
 #
@@ -73,3 +76,10 @@ yarn-error.log
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# Environment files & react-native-config temporary artifacts
+.env*
+!.env*.example
+/ios/tmp.xcconfig
+
+

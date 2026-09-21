@@ -24,7 +24,7 @@ import {
   getFCMToken,
   saveFCMTokenToServer,
 } from '../services/PushNotificationService';
-import { KHEDUTBAZAR_URL, BRAND_COLOR } from '../constants/app';
+import { KHEDUTBAZAR_URL, BRAND_COLOR, ENV } from '../constants/app';
 
 const AUTH_TOKEN_KEY = 'authToken';
 
@@ -81,10 +81,10 @@ function KhedutbazarWebViewScreen(): React.JSX.Element {
       const isBaseUrl =
         url === KHEDUTBAZAR_URL.toLowerCase() ||
         url ===
-          (KHEDUTBAZAR_URL.endsWith('/')
-            ? KHEDUTBAZAR_URL.slice(0, -1)
-            : KHEDUTBAZAR_URL + '/'
-          ).toLowerCase();
+        (KHEDUTBAZAR_URL.endsWith('/')
+          ? KHEDUTBAZAR_URL.slice(0, -1)
+          : KHEDUTBAZAR_URL + '/'
+        ).toLowerCase();
 
       const isGuestPage =
         isBaseUrl || url.includes('/login') || url.includes('/language');
@@ -120,10 +120,10 @@ function KhedutbazarWebViewScreen(): React.JSX.Element {
       const isBaseUrl =
         url === KHEDUTBAZAR_URL.toLowerCase() ||
         url ===
-          (KHEDUTBAZAR_URL.endsWith('/')
-            ? KHEDUTBAZAR_URL.slice(0, -1)
-            : KHEDUTBAZAR_URL + '/'
-          ).toLowerCase();
+        (KHEDUTBAZAR_URL.endsWith('/')
+          ? KHEDUTBAZAR_URL.slice(0, -1)
+          : KHEDUTBAZAR_URL + '/'
+        ).toLowerCase();
 
       const isGuestPage =
         isBaseUrl || url.includes('/login') || url.includes('/language');
