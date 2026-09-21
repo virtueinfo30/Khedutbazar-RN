@@ -1,0 +1,386 @@
+# fastlane/Fastfile
+# Production-ready CI/CD automation for Khedutbazar React Native app
+
+default_platform(:android)
+
+# ==============================================================================
+# Helper Methods
+# ==============================================================================
+
+def validate_version_inputs!(options)
+  version_name = options[:version_name] || ENV["VERSION_NAME"]
+  version_code = options[:version_code] || ENV["VERSION_CODE"]
+
+  if version_name.nil? || version_name.to_s.strip.empty?
+    UI.user_error!("version_name is required and must not be empty (e.g. version_name:\"1.0.1\").")
+  end
+
+  # Validate semantic version format (e.g., 1.0, 1.0.0, 2.1.3-beta)
+  unless version_name.to_s =~ /^[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9.]+)?$/
+    UI.user_error!("Invalid version_name format: '#{version_name}'. Expected semantic format such as '1.0' or '1.0.1'.")
+  end
+
+  if version_code.nil? || version_code.to_s.strip.empty?
+    UI.user_error!("version_code is required (e.g. version_code:\"5\").")
+  end
+
+  # Validate version_code is positive integer
+  unless version_code.to_s =~ /^[1-9][0-9]*$/
+    UI.user_error!("Invalid version_code: '#{version_code}'. Must be a positive integer greater than 0.")
+  end
+
+  [version_name.to_s.strip, version_code.to_s.strip]
+end
+
+def generate_release_notes(env_name, version_name, version_code)
+  commit_hash = `git rev-parse --short HEAD`.strip rescue "unknown"
+  build_time = Time.now.utc.strftime("%Y-%m-%d %H:%M:%S UTC")
+  <<~NOTES
+    Environment: #{env_name}
+    Version: #{version_name} (#{version_code})
+    Git Commit: #{commit_hash}
+    Build Date: #{build_time}
+  NOTES
+end
+
+def distribute_apk_to_firebase(apk_path, app_id, env_name, version_name, version_code)
+  service_account_path = ENV["FIREBASE_SERVICE_ACCOUNT_PATH"] || ENV["GOOGLE_APPLICATION_CREDENTIALS"]
+  service_account_json = ENV["FIREBASE_SERVICE_ACCOUNT"]
+  firebase_token = ENV["FIREBASE_TOKEN"]
+  tester_groups = ENV["FIREBASE_TESTER_GROUPS"]
+
+  temp_service_account = nil
+  if service_account_json && !service_account_json.empty?
+    temp_service_account = File.expand_path("../android/app/firebase-service-account.json", __dir__)
+    File.write(temp_service_account, service_account_json)
+    service_account_path = temp_service_account
+  end
+
+  has_credentials = (service_account_path && File.exist?(service_account_path)) || (firebase_token && !firebase_token.empty?)
+
+  if app_id.nil? || app_id.strip.empty?
+    if is_ci
+      UI.user_error!("Missing Firebase App ID for #{env_name}. Please set FIREBASE_APP_ID_DEV or FIREBASE_APP_ID_PROD.")
+    else
+      UI.important("Skipping Firebase App Distribution: No Firebase App ID configured for #{env_name}.")
+      return
+    end
+  end
+
+  unless has_credentials
+    if is_ci
+      UI.user_error!("Missing Firebase credentials. Set FIREBASE_SERVICE_ACCOUNT or FIREBASE_TOKEN in CI secrets.")
+    else
+      UI.important("Skipping Firebase App Distribution: No Firebase service credentials or token provided locally.")
+      return
+    end
+  end
+
+  UI.message("Distributing #{env_name} APK to Firebase App Distribution (App ID: #{app_id})...")
+
+  firebase_params = {
+    app: app_id,
+    android_artifact_path: apk_path,
+    release_notes: generate_release_notes(env_name, version_name, version_code)
+  }
+
+  firebase_params[:service_credentials_file] = service_account_path if service_account_path && File.exist?(service_account_path)
+  firebase_params[:firebase_cli_token] = firebase_token if firebase_token && !firebase_token.empty?
+  firebase_params[:groups] = tester_groups if tester_groups && !tester_groups.empty?
+
+  firebase_app_distribution(firebase_params)
+  UI.success("Successfully uploaded #{env_name} APK to Firebase App Distribution!")
+ensure
+  if temp_service_account && File.exist?(temp_service_account)
+    File.delete(temp_service_account)
+  end
+end
+
+# ==============================================================================
+# Android Platform Lanes
+# ==============================================================================
+
+platform :android do
+  desc "Build Android Development/Staging Release APK and distribute via Firebase App Distribution"
+  lane :development_apk do |options|
+    version_name, version_code = validate_version_inputs!(options)
+    UI.message("Building Android Development APK: version #{version_name} (#{version_code})")
+
+    # Build assembleRelease using .env.development
+    gradle(
+      task: "assembleRelease",
+      project_dir: "android",
+      properties: {
+        "VERSION_CODE" => version_code,
+        "VERSION_NAME" => version_name
+      },
+      flags: "--no-daemon",
+      environment: {
+        "ENVFILE" => ".env.development"
+      }
+    )
+
+    raw_apk = File.expand_path("../android/app/build/outputs/apk/release/app-release.apk", __dir__)
+    unless File.exist?(raw_apk)
+      UI.user_error!("Build succeeded but expected APK was not found at #{raw_apk}")
+    end
+
+    # Copy to clearly named destination
+    target_dir = File.expand_path("../android/app/build/outputs/apk", __dir__)
+    FileUtils.mkdir_p(target_dir)
+    final_apk = File.join(target_dir, "app-development-#{version_name}-#{version_code}.apk")
+    FileUtils.cp(raw_apk, final_apk)
+    UI.success("Development APK created at: #{final_apk}")
+
+    # Distribute via Firebase App Distribution (NO Google Play Console upload)
+    app_id = ENV["FIREBASE_APP_ID_DEV"] || ENV["FIREBASE_APP_ID"] || "1:840580281011:android:55079c1ae626daf63e76c6"
+    distribute_apk_to_firebase(final_apk, app_id, "Development", version_name, version_code)
+  end
+
+  desc "Build Android Development/Staging Release AAB (Artifact ONLY - NO Play Store upload)"
+  lane :development_aab do |options|
+    version_name, version_code = validate_version_inputs!(options)
+    UI.message("Building Android Development AAB: version #{version_name} (#{version_code})")
+
+    gradle(
+      task: "bundleRelease",
+      project_dir: "android",
+      properties: {
+        "VERSION_CODE" => version_code,
+        "VERSION_NAME" => version_name
+      },
+      flags: "--no-daemon",
+      environment: {
+        "ENVFILE" => ".env.development"
+      }
+    )
+
+    raw_aab = File.expand_path("../android/app/build/outputs/bundle/release/app-release.aab", __dir__)
+    unless File.exist?(raw_aab)
+      UI.user_error!("Build succeeded but expected AAB was not found at #{raw_aab}")
+    end
+
+    target_dir = File.expand_path("../android/app/build/outputs/bundle", __dir__)
+    FileUtils.mkdir_p(target_dir)
+    final_aab = File.join(target_dir, "app-development-#{version_name}-#{version_code}.aab")
+    FileUtils.cp(raw_aab, final_aab)
+    UI.success("Development AAB created at: #{final_aab}")
+    UI.important("AAB build complete. Stored as local/CI artifact. NOT published to Google Play.")
+  end
+
+  desc "Build Android Production Release APK and distribute via Firebase App Distribution (NO Play Store upload)"
+  lane :production_apk do |options|
+    version_name, version_code = validate_version_inputs!(options)
+    UI.message("Building Android Production APK: version #{version_name} (#{version_code})")
+
+    gradle(
+      task: "assembleRelease",
+      project_dir: "android",
+      properties: {
+        "VERSION_CODE" => version_code,
+        "VERSION_NAME" => version_name
+      },
+      flags: "--no-daemon",
+      environment: {
+        "ENVFILE" => ".env.production"
+      }
+    )
+
+    raw_apk = File.expand_path("../android/app/build/outputs/apk/release/app-release.apk", __dir__)
+    unless File.exist?(raw_apk)
+      UI.user_error!("Build succeeded but expected APK was not found at #{raw_apk}")
+    end
+
+    target_dir = File.expand_path("../android/app/build/outputs/apk", __dir__)
+    FileUtils.mkdir_p(target_dir)
+    final_apk = File.join(target_dir, "app-production-#{version_name}-#{version_code}.apk")
+    FileUtils.cp(raw_apk, final_apk)
+    UI.success("Production APK created at: #{final_apk}")
+
+    app_id = ENV["FIREBASE_APP_ID_PROD"] || ENV["FIREBASE_APP_ID"] || "1:840580281011:android:55079c1ae626daf63e76c6"
+    distribute_apk_to_firebase(final_apk, app_id, "Production", version_name, version_code)
+  end
+
+  desc "Build Android Production Release AAB (Artifact ONLY - NO Play Store upload)"
+  lane :production_aab do |options|
+    version_name, version_code = validate_version_inputs!(options)
+    UI.message("Building Android Production AAB: version #{version_name} (#{version_code})")
+
+    gradle(
+      task: "bundleRelease",
+      project_dir: "android",
+      properties: {
+        "VERSION_CODE" => version_code,
+        "VERSION_NAME" => version_name
+      },
+      flags: "--no-daemon",
+      environment: {
+        "ENVFILE" => ".env.production"
+      }
+    )
+
+    raw_aab = File.expand_path("../android/app/build/outputs/bundle/release/app-release.aab", __dir__)
+    unless File.exist?(raw_aab)
+      UI.user_error!("Build succeeded but expected AAB was not found at #{raw_aab}")
+    end
+
+    target_dir = File.expand_path("../android/app/build/outputs/bundle", __dir__)
+    FileUtils.mkdir_p(target_dir)
+    final_aab = File.join(target_dir, "app-production-#{version_name}-#{version_code}.aab")
+    FileUtils.cp(raw_aab, final_aab)
+    UI.success("Production AAB created at: #{final_aab}")
+    UI.important("Production AAB complete. Stored as artifact ONLY. NOT uploaded to Play Console.")
+  end
+end
+
+# Root aliases so `fastlane android_development_apk` or `fastlane android development_apk` both work
+lane :android_development_apk do |options|
+  Fastlane::FastFile.new.runner.execute("development_apk", :android, options)
+end
+
+lane :android_development_aab do |options|
+  Fastlane::FastFile.new.runner.execute("development_aab", :android, options)
+end
+
+lane :android_production_apk do |options|
+  Fastlane::FastFile.new.runner.execute("production_apk", :android, options)
+end
+
+lane :android_production_aab do |options|
+  Fastlane::FastFile.new.runner.execute("production_aab", :android, options)
+end
+
+# ==============================================================================
+# iOS Platform Lanes
+# ==============================================================================
+
+platform :ios do
+  desc "Build iOS Development app and upload to TestFlight (Internal Testing Only)"
+  lane :development_testflight do |options|
+    version_name, version_code = validate_version_inputs!(options)
+    UI.message("Building iOS Development TestFlight build: version #{version_name} (#{version_code})")
+
+    ipa_dir = File.expand_path("../ios/build", __dir__)
+    ipa_name = "Khedutbazar-Development-#{version_name}-#{version_code}.ipa"
+
+    # Build and archive using the Development scheme
+    build_app(
+      workspace: "ios/Khedutbazar.xcworkspace",
+      scheme: "Khedutbazar (Development)",
+      configuration: "Release",
+      clean: true,
+      export_method: "app-store",
+      output_directory: ipa_dir,
+      output_name: ipa_name,
+      xcargs: "MARKETING_VERSION=#{version_name} CURRENT_PROJECT_VERSION=#{version_code}"
+    )
+
+    generated_ipa = File.join(ipa_dir, ipa_name)
+    unless File.exist?(generated_ipa)
+      UI.user_error!("iOS archive succeeded but IPA was not found at #{generated_ipa}")
+    end
+    UI.success("iOS Development IPA generated successfully at: #{generated_ipa}")
+
+    # Authenticate with App Store Connect API Key
+    api_key_id = ENV["APP_STORE_CONNECT_KEY_ID"]
+    api_issuer_id = ENV["APP_STORE_CONNECT_ISSUER_ID"]
+    api_key_content = ENV["APP_STORE_CONNECT_API_KEY"]
+
+    if api_key_id && api_issuer_id && api_key_content && !api_key_content.empty?
+      UI.message("Authenticating with App Store Connect API Key...")
+      api_key = app_store_connect_api_key(
+        key_id: api_key_id,
+        issuer_id: api_issuer_id,
+        key_content: api_key_content,
+        is_key_content_base64: true
+      )
+
+      UI.message("Uploading Development IPA to TestFlight...")
+      upload_to_testflight(
+        api_key: api_key,
+        ipa: generated_ipa,
+        skip_waiting_for_build_processing: true,
+        skip_submission: true,      # STRICT: Do NOT submit for App Store review!
+        distribute_external: false  # STRICT: Do NOT distribute to external testers!
+      )
+      UI.success("Development IPA successfully uploaded to TestFlight for internal testing. (NO App Store release).")
+    else
+      if is_ci
+        UI.user_error!("Missing App Store Connect credentials. Provide APP_STORE_CONNECT_KEY_ID, APP_STORE_CONNECT_ISSUER_ID, and APP_STORE_CONNECT_API_KEY.")
+      else
+        UI.important("Skipping TestFlight upload: App Store Connect API credentials not provided locally. IPA is ready at #{generated_ipa}")
+      end
+    end
+  end
+
+  desc "Build iOS Production app and upload to TestFlight (NO App Store review submission, NO App Store release)"
+  lane :production_testflight do |options|
+    version_name, version_code = validate_version_inputs!(options)
+    UI.message("Building iOS Production TestFlight build: version #{version_name} (#{version_code})")
+
+    ipa_dir = File.expand_path("../ios/build", __dir__)
+    ipa_name = "Khedutbazar-Production-#{version_name}-#{version_code}.ipa"
+
+    # Build and archive using the Production scheme
+    build_app(
+      workspace: "ios/Khedutbazar.xcworkspace",
+      scheme: "Khedutbazar (Production)",
+      configuration: "Release",
+      clean: true,
+      export_method: "app-store",
+      output_directory: ipa_dir,
+      output_name: ipa_name,
+      xcargs: "MARKETING_VERSION=#{version_name} CURRENT_PROJECT_VERSION=#{version_code}"
+    )
+
+    generated_ipa = File.join(ipa_dir, ipa_name)
+    unless File.exist?(generated_ipa)
+      UI.user_error!("iOS archive succeeded but IPA was not found at #{generated_ipa}")
+    end
+    UI.success("iOS Production IPA generated successfully at: #{generated_ipa}")
+
+    # Authenticate with App Store Connect API Key
+    api_key_id = ENV["APP_STORE_CONNECT_KEY_ID"]
+    api_issuer_id = ENV["APP_STORE_CONNECT_ISSUER_ID"]
+    api_key_content = ENV["APP_STORE_CONNECT_API_KEY"]
+
+    if api_key_id && api_issuer_id && api_key_content && !api_key_content.empty?
+      UI.message("Authenticating with App Store Connect API Key...")
+      api_key = app_store_connect_api_key(
+        key_id: api_key_id,
+        issuer_id: api_issuer_id,
+        key_content: api_key_content,
+        is_key_content_base64: true
+      )
+
+      UI.message("Uploading Production IPA to TestFlight...")
+      upload_to_testflight(
+        api_key: api_key,
+        ipa: generated_ipa,
+        skip_waiting_for_build_processing: true,
+        skip_submission: true,      # STRICT: Do NOT submit for App Store review!
+        distribute_external: false  # STRICT: Do NOT distribute to external testers!
+      )
+      UI.success("Production IPA successfully uploaded to TestFlight for internal testing. (NO App Store release).")
+    else
+      if is_ci
+        UI.user_error!("Missing App Store Connect credentials. Provide APP_STORE_CONNECT_KEY_ID, APP_STORE_CONNECT_ISSUER_ID, and APP_STORE_CONNECT_API_KEY.")
+      else
+        UI.important("Skipping TestFlight upload: App Store Connect API credentials not provided locally. IPA is ready at #{generated_ipa}")
+      end
+    end
+  end
+end
+
+lane :ios_development_testflight do |options|
+  Fastlane::FastFile.new.runner.execute("development_testflight", :ios, options)
+end
+
+lane :ios_production_testflight do |options|
+  Fastlane::FastFile.new.runner.execute("production_testflight", :ios, options)
+end
+
+# Alias for backward compatibility
+lane :ios_testflight do |options|
+  Fastlane::FastFile.new.runner.execute("production_testflight", :ios, options)
+end

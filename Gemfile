@@ -15,3 +15,7 @@ gem 'logger'
 gem 'benchmark'
 gem 'mutex_m'
 gem 'nkf'
+
+# Fastlane & CI/CD plugins
+gem 'fastlane'
+gem 'fastlane-plugin-firebase_app_distribution'

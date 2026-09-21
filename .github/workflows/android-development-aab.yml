@@ -1,0 +1,120 @@
+name: Android Development Release AAB
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: "App Version Name (e.g. 1.0.0)"
+        required: true
+        default: "1.0"
+        type: string
+      version_code:
+        description: "Build / Version Code (e.g. 5)"
+        required: true
+        default: "5"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-dev-aab-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-aab:
+    name: Build Dev AAB (Artifact Only - No Play Store Upload)
+    runs-on: ubuntu-latest
+    environment: development
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate version inputs
+        run: |
+          VERSION_NAME="${{ inputs.version_name }}"
+          VERSION_CODE="${{ inputs.version_code }}"
+          echo "Validating Version Name: $VERSION_NAME"
+          echo "Validating Version Code: $VERSION_CODE"
+
+          if [ -z "$VERSION_NAME" ]; then
+            echo "::error::version_name cannot be empty"
+            exit 1
+          fi
+
+          if ! [[ "$VERSION_CODE" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::version_code must be a positive integer > 0 (received: $VERSION_CODE)"
+            exit 1
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+          cache: "yarn"
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: "zulu"
+          java-version: "17"
+          cache: "gradle"
+
+      - name: Setup Ruby and Bundler
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3.0"
+          bundler-cache: true
+
+      - name: Install JavaScript dependencies
+        run: yarn install
+
+      - name: Configure environment file
+        run: |
+          if [ -n "${{ secrets.ENV_DEVELOPMENT }}" ]; then
+            echo "${{ secrets.ENV_DEVELOPMENT }}" > .env.development
+            echo "Wrote .env.development from ENV_DEVELOPMENT secret."
+          elif [ -f ".env.development.example" ]; then
+            cp .env.development.example .env.development
+            echo "Created .env.development from example template."
+          fi
+
+      - name: Setup Android Keystore & signing credentials
+        run: |
+          if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
+            mkdir -p android/app
+            echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/khedutbazar.keystore
+            echo "Decoded release keystore from secret."
+          fi
+
+          cat <<EOF > android/keystore.properties
+          RELEASE_STORE_FILE=${{ secrets.ANDROID_RELEASE_STORE_FILE || 'app/khedutbazar.keystore' }}
+          RELEASE_STORE_PASSWORD=${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS=${{ secrets.ANDROID_RELEASE_KEY_ALIAS || 'khedutbazar' }}
+          RELEASE_KEY_PASSWORD=${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+          EOF
+
+      - name: Build AAB (Artifact Only)
+        env:
+          ANDROID_RELEASE_STORE_FILE: ${{ secrets.ANDROID_RELEASE_STORE_FILE || 'app/khedutbazar.keystore' }}
+          ANDROID_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
+          ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS || 'khedutbazar' }}
+          ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+        run: |
+          bundle exec fastlane android_development_aab \
+            version_name:"${{ inputs.version_name }}" \
+            version_code:"${{ inputs.version_code }}"
+
+      - name: Clean sensitive signing files
+        if: always()
+        run: |
+          rm -f android/keystore.properties
+
+      - name: Upload Development AAB Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-development-${{ inputs.version_name }}-${{ inputs.version_code }}.aab
+          path: android/app/build/outputs/bundle/app-development-${{ inputs.version_name }}-${{ inputs.version_code }}.aab
+          if-no-files-found: error
+          retention-days: 30
