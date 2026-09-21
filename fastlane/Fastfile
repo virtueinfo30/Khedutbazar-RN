@@ -106,18 +106,18 @@ platform :android do
     version_name, version_code = validate_version_inputs!(options)
     UI.message("Building Android Development APK: version #{version_name} (#{version_code})")
 
+    ENV["ENVFILE"] = ".env.development"
+
     # Build assembleRelease using .env.development
     gradle(
       task: "assembleRelease",
       project_dir: "android",
       properties: {
         "VERSION_CODE" => version_code,
-        "VERSION_NAME" => version_name
-      },
-      flags: "--no-daemon",
-      environment: {
+        "VERSION_NAME" => version_name,
         "ENVFILE" => ".env.development"
-      }
+      },
+      flags: "--no-daemon"
     )
 
     raw_apk = File.expand_path("../android/app/build/outputs/apk/release/app-release.apk", __dir__)
@@ -142,17 +142,17 @@ platform :android do
     version_name, version_code = validate_version_inputs!(options)
     UI.message("Building Android Development AAB: version #{version_name} (#{version_code})")
 
+    ENV["ENVFILE"] = ".env.development"
+
     gradle(
       task: "bundleRelease",
       project_dir: "android",
       properties: {
         "VERSION_CODE" => version_code,
-        "VERSION_NAME" => version_name
-      },
-      flags: "--no-daemon",
-      environment: {
+        "VERSION_NAME" => version_name,
         "ENVFILE" => ".env.development"
-      }
+      },
+      flags: "--no-daemon"
     )
 
     raw_aab = File.expand_path("../android/app/build/outputs/bundle/release/app-release.aab", __dir__)
@@ -173,17 +173,17 @@ platform :android do
     version_name, version_code = validate_version_inputs!(options)
     UI.message("Building Android Production APK: version #{version_name} (#{version_code})")
 
+    ENV["ENVFILE"] = ".env.production"
+
     gradle(
       task: "assembleRelease",
       project_dir: "android",
       properties: {
         "VERSION_CODE" => version_code,
-        "VERSION_NAME" => version_name
-      },
-      flags: "--no-daemon",
-      environment: {
+        "VERSION_NAME" => version_name,
         "ENVFILE" => ".env.production"
-      }
+      },
+      flags: "--no-daemon"
     )
 
     raw_apk = File.expand_path("../android/app/build/outputs/apk/release/app-release.apk", __dir__)
@@ -206,17 +206,17 @@ platform :android do
     version_name, version_code = validate_version_inputs!(options)
     UI.message("Building Android Production AAB: version #{version_name} (#{version_code})")
 
+    ENV["ENVFILE"] = ".env.production"
+
     gradle(
       task: "bundleRelease",
       project_dir: "android",
       properties: {
         "VERSION_CODE" => version_code,
-        "VERSION_NAME" => version_name
-      },
-      flags: "--no-daemon",
-      environment: {
+        "VERSION_NAME" => version_name,
         "ENVFILE" => ".env.production"
-      }
+      },
+      flags: "--no-daemon"
     )
 
     raw_aab = File.expand_path("../android/app/build/outputs/bundle/release/app-release.aab", __dir__)
