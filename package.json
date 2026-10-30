@@ -68,7 +68,7 @@
     "js-yaml": "^4.3.2",
     "qs": "^6.16.0",
     "tar": "^7.5.22",
-    "undici": "^6.28.1",
+    "undici": "^6.29.1",
     "launch-editor": "^2.14.1",
     "fast-xml-parser": "^5.11.1",
     "websocket-driver": "^0.7.5",
